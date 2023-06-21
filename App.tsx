@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState, useRef} from 'react';
 import {
   StatusBar,
   ScrollView,
@@ -14,10 +14,16 @@ import SwipeUserBlock from './app/components/SwipeUserBlock';
 function App(): JSX.Element {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [position] = useState(new Animated.ValueXY());
-  const [currentUsers, setCurrentUsers] = useState([
-    profileMocks[0],
-    profileMocks[1],
-  ]);
+  const [currentUser, setCurrentUser] = useState(profileMocks[0]);
+  const [nextUser, setNextUser] = useState(profileMocks[1]);
+  const [likeDislikeStatus, setLikeDislikeStatus] = useState(false);
+
+  useEffect(() => {
+    currentIndex > 0 && setCurrentUser(profileMocks[currentIndex]);
+    currentIndex > 0 && setNextUser(profileMocks[currentIndex + 1]);
+  }, [currentIndex]);
+
+  console.log('~~~~~~~~~~~~~~ currentIndex', currentIndex);
 
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -31,6 +37,7 @@ function App(): JSX.Element {
     onPanResponderRelease: (_, {dx}: {dx: number}) => {
       const screenWidth = Dimensions.get('window').width;
       const swipeThreshold = 0.25 * screenWidth;
+      console.log('~~~~~~~~~~~~~~ dx', dx);
 
       if (dx > swipeThreshold) {
         // Swiped right, handle like action
@@ -50,16 +57,13 @@ function App(): JSX.Element {
   const handleSwipe = (action: 'like' | 'dislike') => {
     if (action === 'like') {
       // Implement logic for a like action
-      console.log('Liked!');
+      console.log('handleSwipe - Liked!');
       moveOffTheScreen('right');
     } else if (action === 'dislike') {
       // Implement logic for a dislike action
       console.log('Disliked!');
       moveOffTheScreen('left');
     }
-
-    // Move to the next picture
-    setTimeout(() => setCurrentIndex(currentIndex + 1), 2000);
 
     function moveOffTheScreen(direction: 'left' | 'right') {
       const shiftX =
@@ -75,6 +79,8 @@ function App(): JSX.Element {
       }).start(() => {
         // Reset position for the next picture
         position.setValue({x: 0, y: 0});
+        // set next current user
+        setCurrentIndex(currentIndex + 1);
       });
     }
   };
@@ -85,80 +91,92 @@ function App(): JSX.Element {
 
     // Calculate the y-coordinate using the equation of a circle
     const result = radius - Math.sqrt(radius * radius - x * x) + angleOffset;
-    // console.log('~~~~~~~~~~~~~~ result', result);
-    // console.log('~~~~ x', x);
     return result;
   };
+
+  const scale = position.x.interpolate({
+    inputRange: [
+      -Dimensions.get('window').width,
+      0,
+      Dimensions.get('window').width,
+    ],
+    outputRange: [1, 0.8, 1], // Adjust the scale values as desired
+    extrapolate: 'clamp',
+  });
+
+  const rotation = position.x.interpolate({
+    inputRange: [
+      -Dimensions.get('window').width,
+      0,
+      Dimensions.get('window').width,
+    ],
+    outputRange: ['-30deg', '0deg', '30deg'], // Adjust the rotation values as desired
+    extrapolate: 'clamp',
+  });
+
+  const overlayOpacity = position.x.interpolate({
+    inputRange: [-30, 0, 30],
+    outputRange: [1, 0, 1], // Adjust the opacity values as desired
+    extrapolate: 'clamp',
+  });
+
+  useEffect(() => {
+    position.x.addListener(({value}) => {
+      setLikeDislikeStatus(value > 0);
+    });
+    return () => position.x.removeAllListeners();
+  }, [position.x]);
+
 
   return (
     <SafeAreaView>
       <StatusBar />
       <ScrollView contentInsetAdjustmentBehavior="automatic">
         <View style={{flex: 1}}>
-          {profileMocks.map((picture, index) => {
-            if (index < currentIndex) {
-              return null; // Skip pictures that have been swiped
-            } else if (index === currentIndex + 1) {
-              // Render the next picture with scale-up effect
-              const scale = position.x.interpolate({
-                inputRange: [
-                  -Dimensions.get('window').width,
-                  0,
-                  Dimensions.get('window').width,
-                ],
-                outputRange: [1, 0.8, 1], // Adjust the scale values as desired
-                extrapolate: 'clamp',
-              });
+          <Animated.View
+            // key={currentUsers[1].id}
+            style={[
+              styles.nextPicture,
+              {
+                transform: [{scale}],
+              },
+            ]}>
+            <SwipeUserBlock
+              width={300}
+              height={400}
+              url={nextUser.url}
+              title={nextUser.title}
+              description={nextUser.description}
+              onDislike={() => {}}
+              onLike={() => {}}
+            />
+          </Animated.View>
 
-              return (
-                <Animated.View
-                  key={picture.id}
-                  style={[
-                    styles.nextPicture,
-                    {
-                      transform: [{scale}],
-                    },
-                  ]}>
-                  <SwipeUserBlock
-                    width={300}
-                    height={400}
-                    url={picture.url}
-                    title={picture.title}
-                    description={picture.description}
-                    onDislike={() => {}}
-                    onLike={() => {}}
-                  />
-                </Animated.View>
-              );
-            } else if (index === currentIndex) {
-              // Render the current picture with swipe gestures
-              return (
-                <Animated.View
-                  {...panResponder.panHandlers}
-                  style={[
-                    {
-                      transform: [
-                        {translateX: position.x},
-                        {translateY: position.y},
-                      ],
-                    },
-                  ]}
-                  key={picture.id}>
-                  <SwipeUserBlock
-                    width={300}
-                    height={400}
-                    url={picture.url}
-                    title={picture.title}
-                    description={picture.description}
-                    onDislike={() => {}}
-                    onLike={() => {}}
-                  />
-                </Animated.View>
-              );
-            } else {
-              return null; // Skip upcoming pictures
-            }
-          })}
+          <Animated.View
+            {...panResponder.panHandlers}
+            style={[
+              {
+                transform: [
+                  {translateX: position.x},
+                  {translateY: position.y},
+                  {rotate: rotation},
+                ],
+              },
+            ]}
+            // key={currentUser.id}
+          >
+            <SwipeUserBlock
+              width={300}
+              height={400}
+              url={currentUser.url}
+              title={currentUser.title}
+              description={currentUser.description}
+              onDislike={() => {}}
+              onLike={() => {}}
+              overlayOpacity={overlayOpacity}
+              likeDislikeStatus={likeDislikeStatus}
+            />
+          </Animated.View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -173,7 +191,7 @@ const styles = StyleSheet.create({
     left: 0,
     zIndex: -1,
     // alignItems: 'center',
-    backgroundColor: 'blue',
+    // backgroundColor: 'blue',
   },
 });
 
