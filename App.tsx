@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useRef} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   StatusBar,
   ScrollView,
@@ -9,21 +9,30 @@ import {
   Dimensions,
   StyleSheet,
 } from 'react-native';
-import {profileMocks} from './app/data/profileMocks';
+import {IProfileMocks, profileMocks} from './app/data/profileMocks';
 import SwipeUserBlock from './app/components/SwipeUserBlock';
 function App(): JSX.Element {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [position] = useState(new Animated.ValueXY());
-  const [currentUser, setCurrentUser] = useState(profileMocks[0]);
-  const [nextUser, setNextUser] = useState(profileMocks[1]);
+  const [currentUser, setCurrentUser] = useState<IProfileMocks>(
+    profileMocks[0],
+  );
+  const [nextUser, setNextUser] = useState<IProfileMocks>(profileMocks[1]);
   const [likeDislikeStatus, setLikeDislikeStatus] = useState(false);
+  const [likedUser, setLikedUser] = useState<IProfileMocks>();
+  console.log('~~~~~~~~~~~~~~ likedUser', likedUser?.title);
 
   useEffect(() => {
     currentIndex > 0 && setCurrentUser(profileMocks[currentIndex]);
     currentIndex > 0 && setNextUser(profileMocks[currentIndex + 1]);
   }, [currentIndex]);
 
-  console.log('~~~~~~~~~~~~~~ currentIndex', currentIndex);
+  useEffect(() => {
+    position.x.addListener(({value}) => {
+      setLikeDislikeStatus(value > 0);
+    });
+    return () => position.x.removeAllListeners();
+  }, [position.x]);
 
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -37,7 +46,6 @@ function App(): JSX.Element {
     onPanResponderRelease: (_, {dx}: {dx: number}) => {
       const screenWidth = Dimensions.get('window').width;
       const swipeThreshold = 0.25 * screenWidth;
-      console.log('~~~~~~~~~~~~~~ dx', dx);
 
       if (dx > swipeThreshold) {
         // Swiped right, handle like action
@@ -57,7 +65,7 @@ function App(): JSX.Element {
   const handleSwipe = (action: 'like' | 'dislike') => {
     if (action === 'like') {
       // Implement logic for a like action
-      console.log('handleSwipe - Liked!');
+      setLikedUser(currentUser);
       moveOffTheScreen('right');
     } else if (action === 'dislike') {
       // Implement logic for a dislike action
@@ -68,8 +76,8 @@ function App(): JSX.Element {
     function moveOffTheScreen(direction: 'left' | 'right') {
       const shiftX =
         direction === 'left'
-          ? -Dimensions.get('window').width
-          : Dimensions.get('window').width;
+          ? -Dimensions.get('window').width - 200
+          : Dimensions.get('window').width + 200;
       const shiftY = 140;
       // Animate the current picture to move off the screen
       Animated.timing(position, {
@@ -79,14 +87,15 @@ function App(): JSX.Element {
       }).start(() => {
         // Reset position for the next picture
         position.setValue({x: 0, y: 0});
-        // set next current user
-        setCurrentIndex(currentIndex + 1);
+        // Set the next current user
+        currentIndex + 2 < profileMocks.length &&
+          setCurrentIndex(currentIndex + 1);
       });
     }
   };
 
   const calculateArcPosition = (x: number) => {
-    const radius = 400; // Adjust the radius of the arc
+    const radius = 800; // Adjust the radius of the arc
     const angleOffset = Math.PI / 2; // Adjust the angle offset of the arc
 
     // Calculate the y-coordinate using the equation of a circle
@@ -94,6 +103,7 @@ function App(): JSX.Element {
     return result;
   };
 
+  // Values for effects for cards
   const scale = position.x.interpolate({
     inputRange: [
       -Dimensions.get('window').width,
@@ -105,36 +115,23 @@ function App(): JSX.Element {
   });
 
   const rotation = position.x.interpolate({
-    inputRange: [
-      -Dimensions.get('window').width,
-      0,
-      Dimensions.get('window').width,
-    ],
+    inputRange: [-300, 0, 300],
     outputRange: ['-30deg', '0deg', '30deg'], // Adjust the rotation values as desired
     extrapolate: 'clamp',
   });
 
   const overlayOpacity = position.x.interpolate({
-    inputRange: [-30, 0, 30],
-    outputRange: [1, 0, 1], // Adjust the opacity values as desired
+    inputRange: [-230, 0, 230],
+    outputRange: [0.8, 0, 0.8], // Adjust the opacity values as desired
     extrapolate: 'clamp',
   });
-
-  useEffect(() => {
-    position.x.addListener(({value}) => {
-      setLikeDislikeStatus(value > 0);
-    });
-    return () => position.x.removeAllListeners();
-  }, [position.x]);
-
 
   return (
     <SafeAreaView>
       <StatusBar />
       <ScrollView contentInsetAdjustmentBehavior="automatic">
-        <View style={{flex: 1}}>
+        <View style={styles.container}>
           <Animated.View
-            // key={currentUsers[1].id}
             style={[
               styles.nextPicture,
               {
@@ -142,37 +139,30 @@ function App(): JSX.Element {
               },
             ]}>
             <SwipeUserBlock
-              width={300}
-              height={400}
+              width={'100%'}
+              height={500}
               url={nextUser.url}
-              title={nextUser.title}
+              title={`${currentUser.title}, ${currentUser.age}`}
               description={nextUser.description}
-              onDislike={() => {}}
-              onLike={() => {}}
             />
           </Animated.View>
-
           <Animated.View
             {...panResponder.panHandlers}
             style={[
               {
                 transform: [
+                  {rotate: rotation},
                   {translateX: position.x},
                   {translateY: position.y},
-                  {rotate: rotation},
                 ],
               },
-            ]}
-            // key={currentUser.id}
-          >
+            ]}>
             <SwipeUserBlock
-              width={300}
-              height={400}
+              width={'100%'}
+              height={500}
               url={currentUser.url}
-              title={currentUser.title}
+              title={`${currentUser.title}, ${currentUser.age}`}
               description={currentUser.description}
-              onDislike={() => {}}
-              onLike={() => {}}
               overlayOpacity={overlayOpacity}
               likeDislikeStatus={likeDislikeStatus}
             />
@@ -184,14 +174,18 @@ function App(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    margin: 10,
+    marginBottom: 80,
+    marginTop: 50,
+  },
   nextPicture: {
     position: 'absolute',
     top: 0,
     right: 0,
     left: 0,
     zIndex: -1,
-    // alignItems: 'center',
-    // backgroundColor: 'blue',
   },
 });
 
